@@ -1,0 +1,231 @@
+#Librerie necessarie
+!pip install yfinance
+import yfinance as yf
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+import numpy as np
+import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+#Scaricare dati storici
+data=yf.download(["RACE", "MBGYY", "TM", "FUJHY", "VWAGY"],start="2018-01-01",end="2024-12-31",interval="1mo")['Close']
+data.head()
+data.plot()
+plt.title('Aziende Automobilistiche')
+#Calcolo rendimenti
+returns=data.pct_change().dropna()
+returns.head()
+#Plot Rendimenti
+returns.plot(figsize=(10, 6))
+plt.title('Rendimenti Mensili')
+plt.xlabel('Data')
+plt.ylabel('Rendimenti Mensili')
+plt.grid(True)
+plt.show()
+!pip install openpyxl
+from google.colab import files
+uploaded = files.upload()
+#Importare dataset completo
+df = pd.read_excel('EsgAdR(2).xlsx', engine='openpyxl')
+# correlation matrix
+def plot_corr_matrix(data, title):
+    # Exclude non-numeric columns
+    numeric_data = data.select_dtypes(include=['number'])
+
+    # Calcolo della correlation matrix
+    corr_matrix = numeric_data.corr()
+
+    # Plot della correlation matrix
+    plt.figure(figsize=(16, 12))
+    sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", square=True, cbar_kws={"shrink": .8})
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
+
+# Plot definitivo
+plot_corr_matrix(df, "Matrice di Correlazione tra Variabili Finanziarie e E-Score, S-Score,G-Score ed ESG Total")
+# Rimuove spazi extra nei nomi delle colonne
+df.columns = df.columns.str.strip()
+
+# Seleziona le variabili
+X = df[['RACE_E_Score', 'RACE_S_Score', 'RACE_G_Score']]
+y = df['RACE_Rend']
+X = sm.add_constant(X)
+
+# Regressione multipla
+model = sm.OLS(y, X).fit()
+print(model.summary())
+
+
+# Predizioni dal modello
+y_pred = model.predict(X)
+
+# Calcolo MSE
+mse = mean_squared_error(y, y_pred)
+
+# Calcolo RMSE
+rmse = np.sqrt(mse)
+
+print(f"MSE: {mse:.2f}")
+print(f"RMSE: {rmse:.2f}")
+
+
+# Grafico osservato vs predetto
+y_pred = model.predict(X)
+plt.figure(figsize=(8, 6))
+plt.scatter(y, y_pred, alpha=0.7, color='orange')
+plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', linewidth=2)
+plt.xlabel("Rendimento osservato")
+plt.ylabel("Rendimento predetto")
+plt.title("RACE - Rendimento osservato vs. predetto")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+# Rimuove spazi extra nei nomi delle colonne
+df.columns = df.columns.str.strip()
+
+# Seleziona le variabili
+X = df[['MBGYY_E_Score', 'MBGYY_S_Score', 'MBGYY_G_Score']]
+y = df['MBGYY_Rend']
+X = sm.add_constant(X)
+
+# Regressione multipla
+model = sm.OLS(y, X).fit()
+print(model.summary())
+
+
+# Predizioni dal modello
+y_pred = model.predict(X)
+
+# Calcolo MSE
+mse = mean_squared_error(y, y_pred)
+
+# Calcolo RMSE
+rmse = np.sqrt(mse)
+
+print(f"MSE: {mse:.2f}")
+print(f"RMSE: {rmse:.2f}")
+
+# Grafico osservato vs predetto
+y_pred = model.predict(X)
+plt.figure(figsize=(8, 6))
+plt.scatter(y, y_pred, alpha=0.7, color='orange')
+plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', linewidth=2)
+plt.xlabel("Rendimento osservato")
+plt.ylabel("Rendimento predetto")
+plt.title("MBGYY- Rendimento osservato vs. predetto")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+# Rimuove spazi extra nei nomi delle colonne
+df.columns = df.columns.str.strip()
+
+# Seleziona le variabili
+X = df[['TM_E_Score', 'TM_S_Score', 'TM_G_Score']]
+y = df['TM_Rend']
+X = sm.add_constant(X)
+
+# Regressione multipla
+model = sm.OLS(y, X).fit()
+print(model.summary())
+
+
+# Predizioni dal modello
+y_pred = model.predict(X)
+
+# Calcolo MSE
+mse = mean_squared_error(y, y_pred)
+
+# Calcolo RMSE
+rmse = np.sqrt(mse)
+
+print(f"MSE: {mse:.2f}")
+print(f"RMSE: {rmse:.2f}")
+
+
+# Grafico osservato vs predetto
+y_pred = model.predict(X)
+plt.figure(figsize=(8, 6))
+plt.scatter(y, y_pred, alpha=0.7, color='orange')
+plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', linewidth=2)
+plt.xlabel("Rendimento osservato")
+plt.ylabel("Rendimento predetto")
+plt.title("TM- Rendimento osservato vs. predetto")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+# Rimuove spazi extra nei nomi delle colonne
+df.columns = df.columns.str.strip()
+
+# Seleziona le variabili
+X = df[['FUJHY_E_Score', 'FUJHY_S_Score', 'FUJHY_G_Score']]
+y = df['FUJHY_Rend']
+X = sm.add_constant(X)
+
+# Regressione multipla
+model = sm.OLS(y, X).fit()
+print(model.summary())
+
+
+# Predizioni dal modello
+y_pred = model.predict(X)
+
+# Calcolo MSE
+mse = mean_squared_error(y, y_pred)
+
+# Calcolo RMSE
+rmse = np.sqrt(mse)
+
+print(f"MSE: {mse:.2f}")
+print(f"RMSE: {rmse:.2f}")
+
+# Grafico osservato vs predetto
+y_pred = model.predict(X)
+plt.figure(figsize=(8, 6))
+plt.scatter(y, y_pred, alpha=0.7, color='orange')
+plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', linewidth=2)
+plt.xlabel("Rendimento osservato")
+plt.ylabel("Rendimento predetto")
+plt.title("FUJHY- Rendimento osservato vs. predetto")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+# Rimuove spazi extra nei nomi delle colonne
+df.columns = df.columns.str.strip()
+
+# Seleziona le variabili
+X = df[['VWAGY_E_Score', 'VWAGY_S_Score', 'VWAGY_G_Score']]
+y = df['VWAGY_Rend']
+X = sm.add_constant(X)
+
+# Regressione multipla
+model = sm.OLS(y, X).fit()
+print(model.summary())
+
+
+# Predizioni dal modello
+y_pred = model.predict(X)
+
+# Calcolo MSE
+mse = mean_squared_error(y, y_pred)
+
+# Calcolo RMSE
+rmse = np.sqrt(mse)
+
+print(f"MSE: {mse:.2f}")
+print(f"RMSE: {rmse:.2f}")
+
+
+# Grafico osservato vs predetto
+y_pred = model.predict(X)
+plt.figure(figsize=(8, 6))
+plt.scatter(y, y_pred, alpha=0.7, color='orange')
+plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', linewidth=2)
+plt.xlabel("Rendimento osservato")
+plt.ylabel("Rendimento predetto")
+plt.title("VWAGY- Rendimento osservato vs. predetto")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
