@@ -1,0 +1,153 @@
+# ==============================================================================
+
+# 1. Carichiamo le librerie base
+library(readxl)
+library(dplyr)
+library(ggplot2)
+
+# ==============================================================================
+# FASE 1: CARICAMENTO DEI DATI E AGGREGAZIONE AZIENDALE
+# ==============================================================================
+# Seleziona il file DATI ESG.xlsx dalla finestra che si apre
+cat("Seleziona il file 'DATI ESG.xlsx'...\n")
+raw_data <- read_excel(file.choose())
+
+# Raggruppiamo per azienda calcolando le medie sul periodo storico (2020-2024)
+dati_aziende <- raw_data %>%
+  group_by(Ticker) %>%
+  summarise(
+    ESG_Score = median(`ESG-TOT-SCORE`, na.rm = TRUE),
+    ROE       = median(ROE, na.rm = TRUE),
+    Returns   = median(`MONTHLY RETURNS`, na.rm = TRUE),
+    MarketCap = median(`MARKET CAP`, na.rm = TRUE)
+  )
+
+# Imputazione dell'unico dato mancante sul ROE con la mediana campionaria (OECD Step 3)
+dati_aziende$ROE[is.na(dati_aziende$ROE)] <- median(dati_aziende$ROE, na.rm = TRUE)
+
+# Trattamento outlier: limitiamo i valori estremi del ROE al 95° percentile
+cap_roe <- quantile(dati_aziende$ROE, 0.95)
+dati_aziende$ROE_clean <- ifelse(dati_aziende$ROE > cap_roe, cap_roe, dati_aziende$ROE)
+
+# FASE 2: MULTIVARIATE ANALYSIS (OECD Step 4)
+# ==============================================================================
+# Verifica di multicollinearità/ridondanza tra gli indicatori prima dell'aggregazione
+matrice_corr <- cor(
+  dati_aziende %>% select(ESG_Score, ROE_clean, Returns),
+  method = "pearson", use = "complete.obs"
+)
+cat("\n--- MATRICE DI CORRELAZIONE (Pearson) ---\n")
+print(round(matrice_corr, 3))
+
+matrice_corr_spearman <- cor(
+  dati_aziende %>% select(ESG_Score, ROE_clean, Returns),
+  method = "spearman", use = "complete.obs"
+)
+cat("\n--- MATRICE DI CORRELAZIONE (Spearman) ---\n")
+print(round(matrice_corr_spearman, 3))
+# ==============================================================================
+# FASE 3: NORMALIZZAZIONE MIN-MAX [0, 100] (OECD Step 5)
+# ==============================================================================
+# Formula Min-Max vista a lezione: (x - min) / (max - min) * 100
+min_max_100 <- function(x) {
+  return(((x - min(x)) / (max(x) - min(x))) * 100)
+}
+
+dati_aziende$Norm_ESG     <- min_max_100(dati_aziende$ESG_Score)
+dati_aziende$Norm_ROE     <- min_max_100(dati_aziende$ROE_clean)
+dati_aziende$Norm_Returns <- min_max_100(dati_aziende$Returns)
+
+# ==============================================================================
+# FASE 4: CALCOLO DEI PESI TRAMITE AHP (Metodo Saaty dello script d'esame)
+# ==============================================================================
+# Definiamo la matrice di confronto a coppie (Scala Saaty da 1 a 9)
+# Consideriamo: ESG (1), ROE (2), Returns (3)
+# Ipotesi di materialità: la redditività economica (ROE) è prioritaria rispetto al puro rendimento
+# e la sostenibilità (ESG) ha peso intermedio.
+AHP_mat <- matrix(c(
+  1,   1/2,   2,    # Confronti di ESG rispetto a ESG, ROE, Returns
+  2,     1,   3,    # Confronti di ROE rispetto a ESG, ROE, Returns
+  1/2, 1/3,   1     # Confronti di Returns rispetto a ESG, ROE, Returns
+), nrow = 3, ncol = 3, byrow = TRUE)
+
+colnames(AHP_mat) <- rownames(AHP_mat) <- c("ESG", "ROE", "Returns")
+
+# Calcolo autovalori e autovettori per estrarre i pesi esatti di Saaty
+eig <- eigen(AHP_mat)
+lamb_max <- Re(eig$values[1])
+v <- abs(Re(eig$vectors[, 1]))
+pesi_AHP <- v / sum(v)
+names(pesi_AHP) <- c("ESG", "ROE", "Returns")
+
+# Controllo di coerenza formale: Consistency Index e Consistency Ratio
+CI <- (lamb_max - 3) / (3 - 1)
+RI <- 0.58  # Valore tabulato per matrice n=3
+CR <- CI / RI
+
+cat("\n--- PESI AHP OTTENUTI ---\n")
+print(round(pesi_AHP, 3))
+cat(paste0("Consistency Ratio (CR): ", round(CR * 100, 2), "% (Accettabile se < 10%)\n"))
+
+# ==============================================================================
+# FASE 5: AGGREGAZIONE E CALCOLO DEGLI INDICI (OECD Step 6)
+# ==============================================================================
+# Indice 1: Pesi AHP (Ponderazione ragionata)
+dati_aziende$Indice_AHP <- (
+  pesi_AHP["ESG"]     * dati_aziende$Norm_ESG +
+    pesi_AHP["ROE"]     * dati_aziende$Norm_ROE +
+    pesi_AHP["Returns"] * dati_aziende$Norm_Returns
+)
+
+# Indice 3: Pesi Uguali / Equal Weights (Benchmark di confronto per sensitività)
+dati_aziende$Indice_Equal <- (
+  dati_aziende$Norm_ESG + dati_aziende$Norm_ROE + dati_aziende$Norm_Returns
+) / 3
+
+# ==============================================================================
+# FASE 6: CLASSIFICA FINALE
+# ==============================================================================
+classifica <- dati_aziende %>%
+  select(Ticker, ESG_Score, ROE, Returns, Indice_AHP, Indice_Equal) %>%
+  arrange(desc(Indice_AHP))
+
+cat("\n--- TOP 10 AZIENDE PER PERFORMANCE COMPOSITA ---\n")
+print(head(classifica, 10))
+
+cat("\n--- FLOP 5 AZIENDE ---\n")
+print(tail(classifica, 5))
+
+# ==============================================================================
+# FASE 7: VISUALIZZAZIONE GRAFICA (OECD Step 8)
+# ==============================================================================
+# Grafico 1: Barplot della Top 10
+top10 <- head(classifica, 10)
+p1 <- ggplot(top10, aes(x = reorder(Ticker, Indice_AHP), y = Indice_AHP)) +
+  geom_col(fill = "#2b5c8f", width = 0.7) +
+  geom_text(aes(label = round(Indice_AHP, 1)), hjust = -0.2, size = 3.5) +
+  coord_flip() +
+  ylim(0, 100) +
+  labs(
+    title = "Top 10 Aziende S&P 500 Health Care",
+    subtitle = "Classifica basata sull'indicatore composito ESGP (Ponderazione AHP)",
+    x = "Azienda (Ticker)",
+    y = "Punteggio Sintetico [0 - 100]"
+  ) +
+  theme_minimal()
+print(p1)
+
+# Grafico 2: Scatter Plot di Sensitività (AHP vs Pesi Uguali)
+p2 <- ggplot(dati_aziende, aes(x = Indice_Equal, y = Indice_AHP)) +
+  geom_point(color = "#e41a1c", size = 2.8, alpha = 0.8) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray40") +
+  labs(
+    title = "Analisi di Sensitività: Confronto AHP vs Pesi Uguali",
+    subtitle = "La vicinanza alla bisettrice conferma la robustezza dell'aggregazione",
+    x = "Indice con Pesi Uguali (Equal Weights)",
+    y = "Indice con Ponderazione AHP"
+  ) +
+  theme_minimal()
+print(p2)
+
+# Correlazione di rango per verificare la robustezza tra i due criteri di pesatura
+correlazione_spearman <- cor(dati_aziende$Indice_AHP, dati_aziende$Indice_Equal, method = "spearman")
+cat(paste0("\nCorrelazione di rango di Spearman (AHP vs Equal): ", round(correlazione_spearman, 4), "\n"))
