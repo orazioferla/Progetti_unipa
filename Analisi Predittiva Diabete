@@ -1,0 +1,764 @@
+library(ggplot2)
+library(mice)
+library(vcd) #mosaicplot
+library(randomForest)
+library(gbm)
+library(caret)
+library(dplyr)
+library(tidyverse)
+library(gridExtra)
+library(car)
+Diabets<- read.csv(file.choose(), sep=";", header=TRUE)
+Diabets <- Diabets %>% select(-X) #elimino la variabile X, ovvero la prima riga che viene considerata variabile 
+#che si genera automaticamente dal dataset
+Diabets
+str(Diabets)
+summary(Diabets)
+View(Diabets)
+table(Diabets$Outcome)
+prop.table(table(Diabets$Outcome))
+#Utilizzo metodi di imputazione per sistemare il dataset da eventuali errori come valori negativi
+#per LDL e HDL e valori di gran lunga improbabili della soglia max di BMI
+Diabets$LDL[Diabets$LDL < 0] <- NA
+Diabets$HDL[Diabets$HDL < 0] <- NA
+Diabets$BMI[Diabets$BMI > 50] <- NA
+imp <- mice(Diabets, method = "pmm", m=5, maxit=5)
+Diabets <- complete(imp)
+summary(Diabets)
+
+# Controllo dati mancanti
+complete.cases(Diabets)
+Diabets<-na.omit((Diabets))
+colSums(is.na(Diabets))
+str((Diabets))
+
+# In questo dataset non ci sono valori duplicati.
+summary(Diabets)
+Diabets[duplicated(Diabets$Formatted.Date),] 
+
+table(Diabets$Outcome)
+prop.table(table(Diabets$Outcome))
+# 0 non ha il diabete
+# 1 ha il diabete
+
+#Divido Age in classi
+Diabets$Age
+summary(Diabets$Age)
+Diabets$Age <- cut(Diabets$Age,
+                    breaks = c(18, 35, 53, 71, 89),
+                    labels = c("18-35", "35-53", "53-71","71-89"),
+                    right = TRUE,
+                    include.lowest = TRUE)
+table(Diabets$Age)
+sum(table(Diabets$Age)) #check
+prop.table(table(Diabets$Age, Diabets$Outcome), margin=2)
+
+# Divido BMI in classi
+table(Diabets$BMI)
+summary(Diabets$BMI)
+Diabets$BMI <- cut(Diabets$BMI,
+                   breaks = c(15, 18.5, 25, 30, 50),
+                   labels = c("<18.5", "18.5-24.9", "25-29.9", "≥30"),
+                   right = TRUE,
+                   include.lowest = TRUE)
+table(Diabets$BMI)
+sum(table(Diabets$BMI)) #check
+prop.table(table(Diabets$BMI, Diabets$Outcome), margin=2)
+
+
+
+# Divido Glucose in classi
+Diabets$Glucose
+summary(Diabets$Glucose)
+Diabets$Glucose<- cut(Diabets$Glucose,
+                        breaks = c(50, 100, 126,208),
+                        labels = c("< 100", "100-125","≥ 126"),
+                        right = TRUE,
+                        include.lowest = TRUE)
+
+table(Diabets$Glucose)
+sum(table(Diabets$Glucose)) #check
+prop.table(table(Diabets$Glucose, Diabets$Outcome), margin=2)
+
+# Divido BloodPressure in classi
+Diabets$BloodPressure
+summary(Diabets$BloodPressure)
+Diabets$BloodPressure <- cut(Diabets$BloodPressure,
+                         breaks = c(60,84,129,138),
+                         labels = c("<120","120-129","130-139"),
+                         right = TRUE,
+                         include.lowest = TRUE)
+
+table(Diabets$BloodPressure)
+sum(table(Diabets$BloodPressure)) #check
+prop.table(table(Diabets$BloodPressure, Diabets$Outcome), margin=2)
+
+# Divido HbA1c in classi
+table(Diabets$HbA1c)
+summary(Diabets$HbA1c)
+Diabets$HbA1c <- cut(Diabets$HbA1c,
+                   breaks = c(4,5.70,6.40,6.90),
+                   labels = c("< 5.7","5.7-6.4","≥ 6.5"),
+                   right = TRUE,
+                   include.lowest = TRUE)
+
+table(Diabets$HbA1c)
+sum(table(Diabets$HbA1c)) #check
+prop.table(table(Diabets$HbA1c, Diabets$Outcome), margin=2)
+
+# Divido LDL (livello colesterolo "cattivo") in classi
+Diabets$LDL <- abs(Diabets$LDL)
+table(Diabets$LDL)
+summary(Diabets$LDL)
+Diabets$LDL <- cut(Diabets$LDL,
+                         breaks = c(0,100,130,150,190,203),
+                         labels = c("<100","100-129","130-159","160-189","≥190"),
+                         right = TRUE,
+                         include.lowest = TRUE)
+
+table(Diabets$LDL)
+sum(table(Diabets$LDL)) #check
+prop.table(table(Diabets$LDL, Diabets$Outcome), margin=2)
+
+# Divido HDL (livello colesterolo "buono") in classi
+Diabets$HDL<-abs(Diabets$HDL)
+table(Diabets$HDL)
+summary(Diabets$HDL)
+Diabets$HDL <- cut(Diabets$HDL,
+                   breaks = c(0,40,60,108),
+                   labels = c("<40","40-59","≥60"),
+                   right = TRUE,
+                   include.lowest = TRUE)
+
+table(Diabets$HDL)
+sum(table(Diabets$HDL)) #check
+prop.table(table(Diabets$HDL, Diabets$Outcome), margin=2)
+
+# Divido Triglycerides in classi
+table(Diabets$Triglycerides)
+summary(Diabets$Triglycerides)
+Diabets$Triglycerides <- cut(Diabets$Triglycerides,
+                   breaks = c(50,150,199,346),
+                   labels = c("<150","150-199","200-499"),
+                   right = TRUE,
+                   include.lowest = TRUE)
+
+table(Diabets$Triglycerides)
+sum(table(Diabets$Triglycerides)) #check
+prop.table(table(Diabets$Triglycerides, Diabets$Outcome), margin=2)
+
+
+# Analisi esplorativa di FamilyHistory,DietType, Hypertension e MedicationUse 
+Diabets$Outcome <- ifelse(Diabets$Outcome == "0", "No Diabete", "Si Diabete")
+tab.hyper <- table(Diabets$Outcome, Diabets$Hypertension)
+tab.fam <- table(Diabets$Outcome,Diabets$FamilyHistory)
+tab.medic <- table(Diabets$Outcome, Diabets$MedicationUse)
+tab.hyper
+tab.fam
+tab.medic
+
+
+table(Diabets$Hypertension)
+prop.table(table(Diabets$Hypertension, Diabets$Outcome), margin=1)
+mosaicplot(tab.hyper, 
+           main = "Distribuzione di Hypertension rispetto a Outcome", xlab="Outcome", ylab="Hypertension",
+           color = c("skyblue", "orange"))
+
+
+table(Diabets$FamilyHistory)
+prop.table(table(Diabets$FamilyHistory,Diabets$Outcome), margin=1)
+length(Diabets$FamilyHistory)
+mosaicplot(tab.fam, 
+           main = "Distribuzione di FamilyHistory rispetto ad Outcome", xlab="Outcome", ylab="FamilyHistory",
+           color = c("skyblue", "orange"))
+
+
+
+table(Diabets$MedicationUse)
+prop.table(table(Diabets$MedicationUse, Diabets$Outcome), margin=1)
+mosaicplot(tab.medic, 
+           main = "Distribuzione di MedicationUse rispetto a Outcome", xlab="Outcome", ylab="MedicationUse",
+           color = c("skyblue", "orange"))
+
+# Analisi esplorativa delle variabili:
+Diabets$Outcome <- ifelse(Diabets$Outcome == "No Diabete", "0", "1")
+Diabets <- Diabets %>%
+  mutate(Outcome = factor(Outcome))
+
+#Age
+table(Diabets$Age)
+prop.table(table(Diabets$Age, Diabets$Outcome), margin=1)
+Diabets %>%
+  group_by(Age, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(Age) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(Age), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di Età", 
+       x = "Età", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+
+#BMI
+table(Diabets$BMI)
+prop.table(table(Diabets$BMI, Diabets$Outcome), margin=1)
+Diabets %>%
+  group_by(BMI, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(BMI) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(BMI), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di BMI", 
+       x = "BMI", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+
+#Glucose
+table(Diabets$Glucose)
+prop.table(table(Diabets$Glucose, Diabets$Outcome), margin=1)
+
+Diabets %>%
+  group_by(Glucose, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(Glucose) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(Glucose), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di Glucose", 
+       x = "Glucose", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+
+#BloodPressure
+table(Diabets$BloodPressure)
+prop.table(table(Diabets$BloodPressure, Diabets$Outcome), margin=1)
+Diabets %>%
+  group_by(BloodPressure, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(BloodPressure) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(BloodPressure), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di BloodPressure", 
+       x = "BloodPressure", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+#LDL
+table(Diabets$LDL)
+prop.table(table(Diabets$LDL, Diabets$Outcome), margin=1)
+Diabets %>%
+  group_by(LDL, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(LDL) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(LDL), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di LDL", 
+       x = "LDL", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+
+#HDL
+table(Diabets$HDL)
+prop.table(table(Diabets$HDL, Diabets$Outcome), margin=1)
+Diabets %>%
+  group_by(HDL, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(HDL) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(HDL), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di HDL", 
+       x = "HDL", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+#Triglycerides
+table(Diabets$Triglycerides)
+prop.table(table(Diabets$Triglycerides, Diabets$Outcome), margin=1)
+Diabets %>%
+  group_by(Triglycerides, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(Triglycerides) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(Triglycerides), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di Triglycerides", 
+       x = "Triglycerides", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+
+#HbA1c
+table(Diabets$HbA1c)
+prop.table(table(Diabets$HbA1c, Diabets$Outcome), margin=1)
+Diabets %>%
+  group_by(HbA1c, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(HbA1c) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(HbA1c), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di HbA1c", 
+       x = "HbA1c", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+
+#DietType
+table(Diabets$DietType)
+prop.table(table(Diabets$DietType, Diabets$Outcome), margin=1)
+Diabets %>%
+  group_by(DietType, Outcome) %>%
+  summarise(count = n()) %>%
+  group_by(DietType) %>%
+  mutate(percentuale = count / sum(count) * 100) %>%
+  ggplot(aes(x = factor(DietType), y = percentuale, fill = factor(Outcome))) +
+  geom_col(position = "dodge", color = "black") +
+  labs(title = "Distribuzione Percentuale di Outcome nelle Classi di DietType", 
+       x = "DietType", 
+       y = "Percentuale di Outcome",
+       fill = "Outcome") +
+  theme_minimal() +
+  scale_x_discrete( labels = c("0"="Squilibrata", "1"="Bilanciata","2"="Vegana/Vegetariana","3"="Sconosciuta")) +
+  scale_fill_manual(values = c("blue", "red"), labels = c("Outcome = No diabete", "Outcome = Si diabete"))
+
+
+
+#Waistcircumference
+ggplot(Diabets, aes(x = as.factor(Outcome), y = WaistCircumference, fill = as.factor(Outcome))) +
+  geom_boxplot() +
+  labs(title = "Distribuzione del WaistCircumference per Outcome", x = "Outcome", y = "WaistCircumference") +
+  theme_minimal()+
+  theme(legend.position = "none")+
+  scale_fill_manual(name = "Outcome", values = c("red", "blue"))+
+  scale_x_discrete(labels = c("0" = "No Diabete", "1" = "Si Diabete"))
+
+
+
+#Hipcircumference
+ggplot(Diabets, aes(x = as.factor(Outcome), y = HipCircumference, fill = as.factor(Outcome))) +
+  geom_boxplot() +
+  labs(title = "Distribuzione del HipCircumference per Outcome", x = "Outcome", y = "HipCircumference") +
+  theme_minimal()+
+  theme(legend.position = "none")+
+  scale_fill_manual(name = "Outcome", values = c("red", "blue"))+
+  scale_x_discrete(labels = c("0" = "No Diabete", "1" = "Si Diabete"))
+
+
+#WHR
+ggplot(Diabets, aes(x = as.factor(Outcome), y = WHR, fill = as.factor(Outcome))) +
+  geom_boxplot() +
+  labs(title = "Distribuzione del WHR per Outcome", x = "Outcome", y = "WHR") +
+  theme_minimal()+
+  theme(legend.position = "none")+
+  scale_fill_manual(name = "Outcome", values = c("red", "blue"))+
+  scale_x_discrete(labels = c("0" = "No Diabete", "1" = "Si Diabete"))
+
+
+
+# Random Forest #
+table(Diabets$Outcome)
+Diabets <- Diabets %>%
+  mutate(across(where(is.character), as.factor),
+         Outcome=as.factor(Outcome))
+
+set.seed(123)
+train_indices <- sample(1:nrow(Diabets), size = 0.75 * nrow(Diabets))
+trainData <- Diabets[train_indices, ]  # Dati di training
+testData <- Diabets[-train_indices, ]  # Dati di test
+
+
+# mtry=3 ntree=500
+MRF1 <- randomForest(Outcome ~ ., data = trainData, 
+                           ntree = 500, 
+                           mtry = 3,
+                           classwt = c("0" = 1, "1" = 6256 / 1641),
+                           importance = TRUE)
+
+# mtry=4 ntree=500
+MRF2 <- randomForest(Outcome ~ ., data = trainData, 
+                           ntree = 500, 
+                           mtry = 4,
+                           classwt = c("0" = 1, "1" = 6256 / 1641),
+                           importance = TRUE)
+
+# mtry=7 ntree=500
+MRF3 <- randomForest(Outcome~ . , data = trainData, 
+                           ntree = 500, 
+                           mtry = 7, 
+                           classwt = c("0" = 1, "1" = 6256 / 1641),
+                           importance = TRUE)
+
+# mtry=10 ntree=500
+MRF4 <- randomForest(Outcome ~ ., data = trainData, 
+                           ntree = 500, 
+                           mtry = 10,
+                           classwt = c("0" = 1, "1" = 6256 / 1641),
+                           importance = TRUE)
+
+# mtry=3 ntree=1000
+MRF5 <- randomForest(Outcome ~ . , data = trainData, 
+                           ntree = 1000, 
+                           mtry = 3, 
+                           classwt = c("0" = 1, "1" = 6256 / 1641),
+                           importance = TRUE)
+
+# mtry=4 ntree=1000
+MRF6 <- randomForest(Outcome~ . , data = trainData, 
+                           ntree = 1000, 
+                           mtry = 4,
+                           classwt = c("0" = 1, "1" = 6256 / 1641),
+                           importance = TRUE)
+
+# mtry=7 ntree=1000
+MRF7 <- randomForest(Outcome ~ ., data = trainData, 
+                           ntree = 1000, 
+                           mtry = 7, 
+                           classwt = c("0" = 1,"1" = 6256 / 1641),
+                           importance = TRUE)
+
+# mtry=10 ntree=1000
+MRF8 <- randomForest(Outcome ~ ., data = trainData, 
+                           ntree = 1000, 
+                           mtry = 10, 
+                           classwt = c("0" = 1, "1" = 6256 / 1641), 
+                           importance = TRUE)
+
+#####scegliere il modelloRF migliore#####
+
+####Faccio le previsioni#######
+
+MRF1_pred<- predict(MRF1, testData) 
+MRF2_pred<- predict(MRF2, testData) 
+MRF3_pred<- predict(MRF3, testData) 
+MRF4_pred<- predict(MRF4, testData) 
+MRF5_pred<- predict(MRF5, testData)  
+MRF6_pred<- predict(MRF6, testData) 
+MRF7_pred<- predict(MRF7, testData) 
+MRF8_pred<- predict(MRF8, testData)  
+
+#Confusion Matrix dei modelli
+CMRF1<-confusionMatrix(MRF1_pred,testData$Outcome)
+CMRF2<-confusionMatrix(MRF2_pred,testData$Outcome)
+CMRF3<-confusionMatrix(MRF3_pred,testData$Outcome)
+CMRF4<-confusionMatrix(MRF4_pred,testData$Outcome)
+CMRF5<-confusionMatrix(MRF5_pred,testData$Outcome)
+CMRF6<-confusionMatrix(MRF6_pred,testData$Outcome)
+CMRF7<-confusionMatrix(MRF7_pred,testData$Outcome)
+CMRF8<-confusionMatrix(MRF8_pred,testData$Outcome)
+
+#Estrazione metriche dei modelli
+accuracy1 <- CMRF1$overall["Accuracy"]
+sensitivity1 <- CMRF1$byClass["Sensitivity"]
+specificity1 <- CMRF1$byClass["Specificity"]
+PPV1<- CMRF1$byClass["Pos Pred Value"]
+F1Score1<-CMRF1$byClass["F1"]
+
+accuracy2 <- CMRF2$overall["Accuracy"]
+sensitivity2 <- CMRF2$byClass["Sensitivity"]
+specificity2 <- CMRF2$byClass["Specificity"]
+PPV2<- CMRF2$byClass["Pos Pred Value"]
+F1Score2<-CMRF2$byClass["F1"]
+
+accuracy3 <- CMRF3$overall["Accuracy"]
+sensitivity3 <- CMRF3$byClass["Sensitivity"]
+specificity3 <- CMRF3$byClass["Specificity"]
+PPV3 <- CMRF3$byClass["Pos Pred Value"]
+F1Score3<-CMRF3$byClass["F1"]
+
+accuracy4 <- CMRF4$overall["Accuracy"]
+sensitivity4 <- CMRF4$byClass["Sensitivity"]
+specificity4 <- CMRF4$byClass["Specificity"]
+PPV4<- CMRF4$byClass["Pos Pred Value"]
+F1Score4<-CMRF4$byClass["F1"]
+
+accuracy5 <- CMRF5$overall["Accuracy"]
+sensitivity5 <- CMRF5$byClass["Sensitivity"]
+specificity5 <- CMRF5$byClass["Specificity"]
+PPV5<- CMRF5$byClass["Pos Pred Value"]
+F1Score5<-CMRF5$byClass["F1"]
+
+accuracy6 <- CMRF6$overall["Accuracy"]
+sensitivity6 <- CMRF6$byClass["Sensitivity"]
+specificity6 <- CMRF6$byClass["Specificity"]
+PPV6<- CMRF6$byClass["Pos Pred Value"]
+F1Score6<-CMRF6$byClass["F1"]
+
+accuracy7 <- CMRF7$overall["Accuracy"]
+sensitivity7 <- CMRF7$byClass["Sensitivity"]
+specificity7 <- CMRF7$byClass["Specificity"]
+PPV7<- CMRF7$byClass["Pos Pred Value"]
+F1Score7<-CMRF7$byClass["F1"]
+
+accuracy8 <- CMRF8$overall["Accuracy"]
+sensitivity8 <- CMRF8$byClass["Sensitivity"]
+specificity8 <- CMRF8$byClass["Specificity"]
+PPV8<- CMRF8$byClass["Pos Pred Value"]
+F1Score8<-CMRF8$byClass["F1"]
+
+#Creazione data frame delle metriche dei modelli
+RF_df<-data.frame(
+  Modello=c('MRF1','MRF2','MRF3','MRF4','MRF5','MRF6','MRF7','MRF8'),
+  Accuracy=c(accuracy1,accuracy2,accuracy3,accuracy4,accuracy5,accuracy6,accuracy7,accuracy8),
+  Sensitivity=c(sensitivity1,sensitivity2,sensitivity3,sensitivity4,sensitivity5,sensitivity6,sensitivity7,sensitivity8),
+  Specificity=c(specificity1,specificity2,specificity3,specificity4,specificity5,specificity6,specificity7,specificity8),
+  PPV=c(PPV1,PPV2,PPV3,PPV4,PPV5,PPV6,PPV7,PPV8),
+  F1=c(F1Score1,F1Score2,F1Score3,F1Score4,F1Score5,F1Score6,F1Score7,F1Score8),
+  ntree=c("500","500","500","500","1000","1000","1000","1000"),
+  mtry=c("3","4","7","10","3","4","7","10" ))
+
+RF_df
+#selezione miglior modello Random Forest
+RF_df_sorted <- RF_df[order(-RF_df$Accuracy, -RF_df$Sensitivity, -RF_df$Specificity,-RF_df$PPV,-RF_df$F1), ]
+print(RF_df_sorted)
+best_model<-RF_df_sorted[1,1]
+print(paste("Il miglior modello di RF è", RF_df_sorted[1,1]))
+#svolgendo il codice attualmente il miglior modello risultante è  MRF6
+importance(MRF6)
+varImpPlot(MRF6)
+
+
+
+# Boosting #
+Diabets <- Diabets %>%
+  mutate(across(where(is.character), as.factor),
+         Outcome = as.numeric(as.character(Outcome)))
+table(Diabets$Outcome)
+str(Diabets)
+set.seed(500)
+train_indices <- sample(1:nrow(Diabets), size = 0.75 * nrow(Diabets))
+trainData <- Diabets[train_indices, ]  # Dati di training
+testData <- Diabets[-train_indices, ]  # Dati di test
+
+
+M1_Boost <- gbm(Outcome ~ ., 
+                data = trainData,
+                distribution = "bernoulli",
+                interaction.depth = 1,
+                n.trees = 300,
+                shrinkage = 0.05,
+                cv.folds = 5)
+gbm.perf(M1_Boost, method = "cv")
+
+M2_Boost <- gbm(Outcome ~ ., 
+                data = trainData,
+                distribution = "bernoulli",
+                interaction.depth = 1,
+                n.trees = 1000,
+                shrinkage = 0.05,
+                cv.folds = 5)
+gbm.perf(M2_Boost, method = "cv")
+
+M3_Boost <- gbm(Outcome ~ . , 
+                data = trainData,
+                distribution = "bernoulli",
+                interaction.depth = 2,
+                n.trees = 500,
+                shrinkage = 0.05,
+                cv.folds = 5)
+gbm.perf(M3_Boost, method = "cv")
+
+M4_Boost <- gbm(Outcome ~ . , 
+                data = trainData,
+                distribution = "bernoulli",
+                interaction.depth = 2,
+                n.trees = 1000,
+                shrinkage = 0.01,
+                cv.folds = 5)
+gbm.perf(M4_Boost, method = "cv")
+
+M5_Boost <- gbm(Outcome ~ ., 
+                data = trainData,
+                distribution = "bernoulli",
+                interaction.depth = 3,
+                n.trees = 500,
+                shrinkage = 0.05,
+                cv.folds = 5)
+gbm.perf(M5_Boost, method = "cv")
+
+M6_Boost <- gbm(Outcome ~ ., 
+                data = trainData,
+                distribution = "bernoulli",
+                interaction.depth = 2,
+                n.trees = 1000,
+                shrinkage = 0.05,
+                cv.folds = 5)
+gbm.perf(M6_Boost, method = "cv")
+
+M7_Boost <- gbm(Outcome ~ . , 
+                data = trainData,
+                distribution = "bernoulli",
+                interaction.depth = 3,
+                n.trees = 1000,
+                shrinkage = 0.05,
+                cv.folds = 5)
+gbm.perf(M7_Boost, method = "cv")
+
+M8_Boost <- gbm(Outcome ~ ., 
+                data = trainData,
+                distribution = "bernoulli",
+                interaction.depth = 1,
+                n.trees = 500,
+                shrinkage = 0.01,
+                cv.folds = 5)
+gbm.perf(M8_Boost, method = "cv")
+
+####scegliere miglior modello boosting ####
+
+####Faccio le previsioni#######
+best_trees1<-gbm.perf(M1_Boost, method = 'cv')
+pred_probs1=predict(M1_Boost,testData,n.trees=best_trees1, type='response')
+preds_class1<-ifelse(pred_probs1>0.5,1,0)
+table(preds_class1)
+
+best_trees2<-gbm.perf(M2_Boost, method = 'cv')
+pred_probs2=predict(M2_Boost,testData,n.trees=best_trees2, type='response')
+preds_class2<-ifelse(pred_probs2>0.5,1,0)
+table(preds_class2)
+
+best_trees3<-gbm.perf(M3_Boost, method = 'cv')
+pred_probs3=predict(M3_Boost,testData,n.trees=best_trees3, type='response')
+preds_class3<-ifelse(pred_probs3>0.5,1,0)
+table(preds_class3)
+
+best_trees4<-gbm.perf(M4_Boost, method = 'cv')
+pred_probs4<-predict(M1_Boost,testData,n.trees=best_trees4, type='response')
+preds_class4<-ifelse(pred_probs4>0.5,1,0)
+table(preds_class4)
+
+best_trees5<-gbm.perf(M5_Boost, method = 'cv')
+pred_probs5=predict(M5_Boost,testData,n.trees=best_trees5, type='response')
+preds_class5<-ifelse(pred_probs5>0.5,1,0)
+table(preds_class5)
+
+best_trees6<-gbm.perf(M6_Boost, method = 'cv')
+pred_probs6=predict(M6_Boost,testData,n.trees=best_trees6, type='response')
+preds_class6<-ifelse(pred_probs6>0.5,1,0)
+table(preds_class6)
+
+best_trees7<-gbm.perf(M7_Boost, method = 'cv')
+pred_probs7=predict(M7_Boost,testData,n.trees=best_trees7, type='response')
+preds_class7<-ifelse(pred_probs7>0.5,1,0)
+table(preds_class7)
+
+best_trees8<-gbm.perf(M8_Boost, method = 'cv')
+pred_probs8=predict(M8_Boost,testData,n.trees=best_trees8, type='response')
+preds_class8<-ifelse(pred_probs8>0.5,1,0)
+table(preds_class8)
+
+#Confusion Matrix dei modelli
+CMB1<-confusionMatrix(as.factor(preds_class1),as.factor(testData$Outcome))
+CMB2<-confusionMatrix(as.factor(preds_class2),as.factor(testData$Outcome))
+CMB3<-confusionMatrix(as.factor(preds_class3),as.factor(testData$Outcome))
+CMB4<-confusionMatrix(as.factor(preds_class4),as.factor(testData$Outcome))
+CMB5<-confusionMatrix(as.factor(preds_class5),as.factor(testData$Outcome))
+CMB6<-confusionMatrix(as.factor(preds_class6),as.factor(testData$Outcome))
+CMB7<-confusionMatrix(as.factor(preds_class7),as.factor(testData$Outcome))
+CMB8<-confusionMatrix(as.factor(preds_class8),as.factor(testData$Outcome))
+
+#Estrazione metriche dei modelli
+accuracyb1 <- CMB1$overall["Accuracy"]
+sensitivityb1 <- CMB1$byClass["Sensitivity"]
+specificityb1 <- CMB1$byClass["Specificity"]
+PPVb1<- CMB1$byClass["Pos Pred Value"]
+F1Scoreb1<-CMB1$byClass["F1"]
+
+accuracyb2 <- CMB2$overall["Accuracy"]
+sensitivityb2 <- CMB2$byClass["Sensitivity"]
+specificityb2 <- CMB2$byClass["Specificity"]
+PPVb2<- CMB2$byClass["Pos Pred Value"]
+F1Scoreb2<-CMB2$byClass["F1"]
+
+accuracyb3 <- CMB3$overall["Accuracy"]
+sensitivityb3 <- CMB3$byClass["Sensitivity"]
+specificityb3 <- CMB3$byClass["Specificity"]
+PPVb3<- CMB3$byClass["Pos Pred Value"]
+F1Scoreb3<-CMB3$byClass["F1"]
+
+accuracyb4 <- CMB4$overall["Accuracy"]
+sensitivityb4 <- CMB4$byClass["Sensitivity"]
+specificityb4 <- CMB4$byClass["Specificity"]
+PPVb4<- CMB4$byClass["Pos Pred Value"]
+F1Scoreb4<-CMB4$byClass["F1"]
+
+accuracyb5 <- CMB5$overall["Accuracy"]
+sensitivityb5 <- CMB5$byClass["Sensitivity"]
+specificityb5 <- CMB5$byClass["Specificity"]
+PPVb5<- CMB5$byClass["Pos Pred Value"]
+F1Scoreb5<-CMB5$byClass["F1"]
+
+accuracyb6 <- CMB6$overall["Accuracy"]
+sensitivityb6 <- CMB6$byClass["Sensitivity"]
+specificityb6 <- CMB6$byClass["Specificity"]
+PPVb6<- CMB6$byClass["Pos Pred Value"]
+F1Scoreb6<-CMB6$byClass["F1"]
+
+accuracyb7 <- CMB7$overall["Accuracy"]
+sensitivityb7 <- CMB7$byClass["Sensitivity"]
+specificityb7 <- CMB7$byClass["Specificity"]
+PPVb7<- CMB7$byClass["Pos Pred Value"]
+F1Scoreb7<-CMB7$byClass["F1"]
+
+accuracyb8 <- CMB8$overall["Accuracy"]
+sensitivityb8 <- CMB8$byClass["Sensitivity"]
+specificityb8 <- CMB8$byClass["Specificity"]
+PPVb8<- CMB8$byClass["Pos Pred Value"]
+F1Scoreb8<-CMB8$byClass["F1"]
+
+#Creazione data frame delle metriche dei modelli
+GBM_df<-data.frame(
+  Modello=c('M1_boost','M2_boost','M3_boost','M4_boost','M5_boost','M6_boost','M7_boost','M8_boost'),
+  Accuracy=c(accuracyb1,accuracyb2,accuracyb3,accuracyb4,accuracyb5,accuracyb6,accuracyb7,accuracyb8),
+  Sensitivity=c(sensitivityb1,sensitivityb2,sensitivityb3,sensitivityb4,sensitivityb5,sensitivityb6,sensitivityb7,sensitivityb8),
+  Specificity=c(specificityb1,specificityb2,specificityb3,specificityb4,specificityb5,specificityb6,specificityb7,specificityb8),
+  PPV=c(PPVb1,PPVb2,PPVb3,PPVb4,PPVb5,PPVb6,PPVb7,PPVb8),
+  F1=c(F1Scoreb1,F1Scoreb2,F1Scoreb3,F1Scoreb4,F1Scoreb5,F1Scoreb6,F1Scoreb7,F1Scoreb8),
+  ntree=c(best_trees1,best_trees2,best_trees3,best_trees4,best_trees5,best_trees6,best_trees7,best_trees8))
+
+GBM_df
+
+#selezione miglior modello Boosting
+GBM_df_sorted <- GBM_df[order(-GBM_df$Accuracy, -GBM_df$Sensitivity, -GBM_df$Specificity,-GBM_df$PPV, -GBM_df$F1,GBM_df$ntree), ]
+print(GBM_df_sorted)
+best_modelb<-GBM_df_sorted[1,1]
+print(paste("Il miglior modello di GBM è", GBM_df_sorted[1,1]))
+
+#svolgendo il codice attualmente il miglior modello risultante è M5_Boost
+gbm.perf(M5_Boost, method="cv")
+importanza_var <- summary(M5_Boost)
+print(importanza_var)
+
+
+#Selezione miglior Modello di previsione: Confronto della sensitività ed F1-score
+
+Risultato_finale <- data.frame(
+  Modello = c("M5_boost", "MRF6"),
+  Sensitività = c(CMB5$byClass["Sensitivity"], CMRF6$byClass["Sensitivity"]),
+  F1Score=c(CMB5$byClass["F1"],CMRF6$byClass["F1"])
+)
+
+print(Risultato_finale)
